@@ -5,6 +5,7 @@
 <title>ヒュースの七夕2026</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
+<!-- 筆文字風フォント -->
 <link href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
@@ -67,16 +68,106 @@
     word-break: break-word;
     cursor: pointer;
     font-family: 'Kaisei Decol', serif;
-    transition:transform0.2s;
+    transition: transform 0.2s;
   }
 
   @keyframes sway {
     from { transform: rotate(-3deg); }
     to   { transform: rotate(3deg); }
   }
+
+  /* ――― ここからサイドバー用のスタイル ――― */
+  
+  /* 一覧を開くボタン */
+  #sidebar-toggle {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    z-index: 20;
+    padding: 10px 15px;
+    background: #2e7d32;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  }
+
+  /* サイドバー本体（初期状態は右側に隠す） */
+  #sidebar {
+    position: absolute;
+    top: 0;
+    right: -300px;
+    width: 260px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 30;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+    transition: right 0.3s ease;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto; /* 縦スクロール可能にする */
+  }
+
+  /* サイドバーが表示されているときのクラス */
+  #sidebar.open {
+    right: 0;
+  }
+
+  /* 閉じるボタン */
+  #sidebar-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    float: right;
+    color: #666;
+  }
+
+  #sidebar h3 {
+    margin-top: 10px;
+    color: #2e7d32;
+    border-bottom: 2px solid #a0d0a0;
+    padding-bottom: 5px;
+    font-family: 'Kaisei Decol', serif;
+  }
+
+  /* リストの各アイテム */
+  .wish-item {
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    border-left: 5px solid; /* 左端に短冊の色の線を引く */
+    background: #f9f9f9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .wish-item-text {
+    font-weight: bold;
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+
+  .wish-item-name {
+    font-size: 12px;
+    color: #666;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
+
+<!-- 一覧を開くボタン -->
+<button id="sidebar-toggle" onclick="toggleSidebar(true)">🎋 一覧を見る</button>
+
+<!-- サイドバー本体 -->
+<div id="sidebar">
+  <button id="sidebar-close" onclick="toggleSidebar(false)">✕</button>
+  <h3>みんなの願い事一覧</h3>
+  <div id="wish-list-container"><!-- ここにJavaScriptで一覧が追加されます --></div>
+</div>
 
 <div id="form">
   <input id="wish" type="text" placeholder="願いごと">
@@ -95,22 +186,32 @@
 
 <div id="area"></div>
 
+<!-- サイドバーの開閉用スクリプト（簡易的なもの） -->
+<script>
+  function toggleSidebar(open) {
+    const sidebar = document.getElementById("sidebar");
+    if (open) {
+      sidebar.classList.add("open");
+    } else {
+      sidebar.classList.remove("open");
+    }
+  }
+</script>
+
+<!-- Firebaseの処理 -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  // ★サークル用の簡易パスワード制限
-  // 好きな合言葉に変更してください（例: サークル名など）
   const SECRET_PASSWORD = "ヒュース"; 
 
   const inputPass = prompt("サークルの合言葉を入力してください：");
   if (inputPass !== SECRET_PASSWORD) {
     alert("合言葉が違います。アクセスできません。");
     document.body.innerHTML = "<h1 style='text-align:center; margin-top:20vh;'>閲覧権限がありません。</h1>";
-    throw new Error("Password incorrect"); // 処理を強制ストップ
+    throw new Error("Password incorrect");
   }
 
-  // いただいたFirebaseの設定
   const firebaseConfig = {
     apiKey: "AIzaSyA__WisNkn73VqoQBBOFY_DAZMW2iO068Q",
     authDomain: "tanabata-circle.firebaseapp.com",
@@ -124,15 +225,19 @@
   const db = getFirestore(app);
   const tanzakuCollection = collection(db, "wishes");
 
-  // 1. データベースからリアルタイムに短冊を取得して画面に表示する処理
+  // 1. データベースからリアルタイムに短冊（＆一覧）を取得して表示
   onSnapshot(tanzakuCollection, (snapshot) => {
     const area = document.getElementById("area");
-    area.innerHTML = ""; // 一旦画面をクリアして再描画
+    const listContainer = document.getElementById("wish-list-container");
+    
+    area.innerHTML = "";        // 笹の画面をクリア
+    listContainer.innerHTML = ""; // サイドバーの一覧をクリア
 
     snapshot.forEach((docSnap) => {
       const t = docSnap.data();
-      const docId = docSnap.id; // 削除するときに使うID
+      const docId = docSnap.id;
 
+      // --- ① 画面に吊るす短冊の作成 ---
       const div = document.createElement("div");
       div.className = "tanzaku";
       div.style.background = t.color;
@@ -140,28 +245,63 @@
       div.style.top = t.y + "px";
       div.innerHTML = `${t.wish}<br>— ${t.name}`;
 
-     // ★ここを追加：クリックしたら一番手前に来るようにする
+      // 重なり防止：触ったら一番手前に来る処理
       div.addEventListener('mouseenter', () => {
         div.style.zIndex = "999";
-        div.style.transform = "scale(1.05) rotate(0deg)"; // 少し大きくして真っ直ぐに
+        div.style.transform = "scale(1.05) rotate(0deg)";
       });
       div.addEventListener('mouseleave', () => {
         div.style.zIndex = "auto";
-        div.style.transform = ""; // 元に戻す
+        div.style.transform = "";
       });
 
-      // 短冊をクリックしたときの削除処理
-      div.onclick = async () => {
+      // 【変更】短冊本体をクリックしたときは、削除ではなく「一番手前に持ってくる（スマホ用）」
+      div.onclick = () => {
+        // すべての短冊の重ね順を一度リセット
+        document.querySelectorAll('.tanzaku').forEach(el => el.style.zIndex = "auto");
+        // タップされたこの短冊だけを最前面にする
+        div.style.zIndex = "999";
+      };
+
+      // 【追加】短冊の右上に、小さな削除用の「✕」ボタンを作る
+      const deleteBtn = document.createElement("span");
+      deleteBtn.innerHTML = "×";
+      deleteBtn.style.cssText = `
+        position: absolute;
+        top: 2px;
+        right: 5px;
+        font-size: 14px;
+        color: rgba(0,0,0,0.4);
+        cursor: pointer;
+        font-family: sans-serif;
+        writing-mode: horizontal-tb; /* 縦書きに巻き込まれないように横書き指定 */
+      `;
+
+      // 「✕」ボタンが押されたときだけ削除処理を実行する
+      deleteBtn.onclick = async (event) => {
+        event.stopPropagation(); // 短冊本体のクリックイベントが連動して動くのを防ぐ呪文
         if (confirm("この短冊をみんなの画面からも削除しますか？")) {
           await deleteDoc(doc(db, "wishes", docId));
         }
       };
 
+      // 短冊の中に「✕」ボタンを組み込む
+      div.appendChild(deleteBtn);
+
       area.appendChild(div);
+      // --- ② サイドバーに表示するリストアイテムの作成 ---
+      const listItem = document.createElement("div");
+      listItem.className = "wish-item";
+      listItem.style.borderLeftColor = t.color; // 短冊と同じ色を左側の線に塗る
+      listItem.innerHTML = `
+        <div class="wish-item-text">${t.wish}</div>
+        <div class="wish-item-name">— ${t.name}</div>
+      `;
+      listContainer.appendChild(listItem);
     });
   });
 
-  // 2. 短冊を新しく追加（Firebaseへ送信）する処理
+  // 2. 短冊を新しく追加する処理
   document.getElementById("submit-btn").onclick = async () => {
     const wish = document.getElementById("wish").value;
     const name = document.getElementById("name").value || "匿名";
@@ -177,19 +317,16 @@
       name,
       color,
       x: Math.random() * (window.innerWidth - 100),
-      y: 150+Math.random() * (window.innerHeight - 350)
+      y: 150 + Math.random() * (window.innerHeight - 350)
     };
 
     try {
-      // Firebaseにデータを送信（コレクションが自動で作られます）
       await addDoc(tanzakuCollection, tanzaku);
-      
-      // 入力欄をクリア
       document.getElementById("wish").value = "";
       document.getElementById("name").value = "";
     } catch (error) {
       console.error("エラーが発生しました:", error);
-      alert("送信に失敗しました。テストモードの期限が切れていないか確認してください。");
+      alert("送信に失敗しました。");
     }
   };
 </script>
